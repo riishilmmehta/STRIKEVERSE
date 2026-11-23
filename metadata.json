@@ -1,0 +1,6 @@
+{
+  "name": "Strikeverse",
+  "description": "A living 3rd-person 3D open-world martial arts action, adventure, and sandbox game featuring customizable heroes, fast Light/Heavy combo combat, Nexus City social hub, Boss Campaign, PvP Arenas, and buildable Dojo plots.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
