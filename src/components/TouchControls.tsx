@@ -22,6 +22,49 @@ interface TouchControlsProps {
   onUltimate: () => void;
 }
 
+const RING_R = 18;
+const RING_CIRC = 2 * Math.PI * RING_R;
+
+function RadialProgressIcon({
+  progress,
+  strokeHex,
+  ready,
+}: {
+  progress: number;
+  strokeHex: string;
+  ready: boolean;
+}) {
+  const clamped = Math.max(0, Math.min(1, progress));
+  const offset = RING_CIRC * (1 - clamped);
+  return (
+    <svg
+      viewBox="0 0 44 44"
+      aria-hidden="true"
+      className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none"
+    >
+      <circle
+        cx="22"
+        cy="22"
+        r={RING_R}
+        fill="none"
+        stroke="rgba(148,163,184,0.22)"
+        strokeWidth="3"
+      />
+      <circle
+        cx="22"
+        cy="22"
+        r={RING_R}
+        fill="none"
+        stroke={strokeHex}
+        strokeWidth={ready ? '3.5' : '3'}
+        strokeDasharray={RING_CIRC}
+        strokeDashoffset={offset}
+        strokeLinecap="butt"
+      />
+    </svg>
+  );
+}
+
 export function TouchControls({
   skillCooldown,
   skillMaxCooldown,
@@ -45,6 +88,7 @@ export function TouchControls({
   const padRef = useRef<HTMLDivElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
+  const swipeJumpFiredRef = useRef<boolean>(false);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
 
   const updateStick = (clientX: number, clientY: number, isEnd = false) => {
@@ -52,6 +96,7 @@ export function TouchControls({
     if (!el) return;
     if (isEnd) {
       setKnob({ x: 0, y: 0 });
+      swipeJumpFiredRef.current = false;
       onJoystick(0, 0, false);
       return;
     }
@@ -68,9 +113,18 @@ export function TouchControls({
 
     setKnob({ x: nx * maxR, y: ny * maxR });
 
-    // Quick directional flick triggers Dodge-Dash (GDD touch spec!)
     const elapsed = performance.now() - startTimeRef.current;
-    const isFlick = elapsed < 140 && dist > maxR * 0.85;
+
+    // Quick swipe-up triggers Jump (replaces redundant standalone JUMP button)
+    if (!swipeJumpFiredRef.current && elapsed < 190 && ny < -0.82 && Math.abs(nx) < 0.48) {
+      swipeJumpFiredRef.current = true;
+      onJump();
+      onJoystick(nx, ny, false);
+      return;
+    }
+
+    // Quick horizontal/diagonal flick triggers Dodge-Dash
+    const isFlick = elapsed < 140 && dist > maxR * 0.85 && ny >= -0.7;
     onJoystick(nx, ny, isFlick);
   };
 
@@ -78,6 +132,7 @@ export function TouchControls({
     e.stopPropagation();
     pointerIdRef.current = e.pointerId;
     startTimeRef.current = performance.now();
+    swipeJumpFiredRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     updateStick(e.clientX, e.clientY);
   };
@@ -96,12 +151,22 @@ export function TouchControls({
   };
 
   const ultReady = ultimate >= 100;
+  const ultProgress = Math.max(0, Math.min(1, ultimate / 100));
   const skillReady = skillCooldown <= 0;
+  const skillProgress = skillReady
+    ? 1
+    : Math.max(0, Math.min(1, 1 - skillCooldown / Math.max(0.1, skillMaxCooldown)));
   const petReady = petEnabled && petCooldown <= 0;
+  const petProgress = petReady
+    ? 1
+    : Math.max(0, Math.min(1, 1 - petCooldown / Math.max(0.1, petMaxCooldown)));
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-10 pointer-events-none flex items-end justify-between px-4 pb-4 sm:px-6 sm:pb-5">
-      {/* Bottom-Left: Virtual Joystick + Quick Dash */}
+    <div
+      data-testid="battle-controls"
+      className="fixed inset-x-0 bottom-0 z-10 pointer-events-none flex items-end justify-between px-4 pb-4 sm:px-6 sm:pb-5"
+    >
+      {/* Bottom-Left: Virtual Joystick (swipe-up to jump) + Quick Dash */}
       <div className="pointer-events-auto flex items-end gap-3">
         <div
           ref={padRef}
@@ -139,10 +204,43 @@ export function TouchControls({
         </button>
       </div>
 
-      {/* Bottom-Right: Mobile-First 4-Button Combat Diamond + Jump & Ultimate */}
-      <div className="pointer-events-auto flex flex-col items-end gap-2">
-        {/* Pet Power, Ultimate & Jump Row */}
-        <div className="flex items-center gap-2 pr-1">
+      {/* Bottom-Right: Compact Secondary Icon Column ABOVE the 4-Button Combat Diamond */}
+      <div className="pointer-events-auto flex flex-col items-end gap-3">
+        {/* ONE compact vertical column of secondary combat timers/rings (ULT % · PET timer · SKILL CD ring) */}
+        <div
+          aria-label="Secondary Combat Abilities"
+          className="flex flex-col items-center gap-2 pr-1"
+        >
+          {/* Ultimate Charge Ring Icon */}
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={!ultReady}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.currentTarget.blur();
+              onUltimate();
+            }}
+            aria-label="Ultimate Finisher"
+            title={ultReady ? 'Ultimate Ready [I]' : `Ultimate ${ultimate}%`}
+            className={`relative w-11 h-11 rounded-full flex flex-col items-center justify-center font-display font-bold leading-none transition-transform cursor-pointer ${
+              ultReady
+                ? 'bg-amber-400 text-slate-950 active:scale-95 shadow-[0_0_16px_rgba(245,158,11,0.7)]'
+                : 'bg-[#0b101b]/88 text-amber-200 cursor-not-allowed'
+            }`}
+          >
+            <RadialProgressIcon
+              progress={ultProgress}
+              strokeHex={ultReady ? '#fef08a' : '#f59e0b'}
+              ready={ultReady}
+            />
+            <span className="text-[9px] tracking-wider uppercase">ULT</span>
+            <span className="text-[10px] font-mono-num">
+              {ultReady ? '[I]' : `${ultimate}%`}
+            </span>
+          </button>
+
+          {/* Pet Power Cooldown Ring Icon */}
           {petEnabled && (
             <button
               type="button"
@@ -155,56 +253,31 @@ export function TouchControls({
               }}
               aria-label={`Pet Power: ${petAbilityName}`}
               title={`${petAbilityName} [G]`}
-              className={`clip-angled-sm px-3 py-2 font-display font-bold text-xs tracking-wider uppercase border transition-transform cursor-pointer whitespace-nowrap ${
+              className={`relative w-11 h-11 rounded-full flex flex-col items-center justify-center font-display font-bold leading-none transition-transform cursor-pointer ${
                 petReady
-                  ? 'bg-emerald-400 text-slate-950 border-emerald-200 hover:bg-emerald-300 active:scale-95 shadow-[0_0_12px_rgba(52,211,153,0.55)]'
-                  : 'bg-[#0b101b]/75 text-slate-400 border-slate-700 cursor-not-allowed'
+                  ? 'bg-emerald-400 text-slate-950 active:scale-95 shadow-[0_0_12px_rgba(52,211,153,0.55)]'
+                  : 'bg-[#0b101b]/88 text-emerald-200/80 cursor-not-allowed'
               }`}
             >
-              {petReady
-                ? 'PET [G]'
-                : `PET ${petCooldown.toFixed(1)}s`}
-              {!petReady && petMaxCooldown > 0 ? '' : ''}
+              <RadialProgressIcon
+                progress={petProgress}
+                strokeHex={petReady ? '#bbf7d0' : '#34d399'}
+                ready={petReady}
+              />
+              <span className="text-[9px] tracking-wider uppercase">PET</span>
+              <span className="text-[10px] font-mono-num">
+                {petReady ? '[G]' : `${petCooldown.toFixed(1)}s`}
+              </span>
             </button>
           )}
-
-          <button
-            type="button"
-            tabIndex={-1}
-            disabled={!ultReady}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.currentTarget.blur();
-              onUltimate();
-            }}
-            aria-label="Ultimate Finisher"
-            className={`clip-angled-sm px-3.5 py-2 font-display font-bold text-xs tracking-wider uppercase border transition-transform cursor-pointer whitespace-nowrap ${
-              ultReady
-                ? 'bg-amber-400 text-slate-950 border-amber-200 hover:bg-amber-300 active:scale-95 shadow-[0_0_16px_rgba(245,158,11,0.7)]'
-                : 'bg-[#0b101b]/75 text-slate-400 border-slate-700 cursor-not-allowed'
-            }`}
-          >
-            {ultReady ? 'ULT READY [I]' : `ULT ${ultimate}%`}
-          </button>
-
-          <button
-            type="button"
-            tabIndex={-1}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.currentTarget.blur();
-              onJump();
-            }}
-            aria-label="Jump"
-            className="w-12 h-10 clip-angled-sm bg-[#0f172a]/85 hover:bg-slate-800 active:scale-95 border border-slate-500/60 text-slate-100 font-display font-bold text-[11px] flex flex-col items-center justify-center cursor-pointer"
-          >
-            <span>JUMP</span>
-          </button>
         </div>
 
-        {/* 4-Button Diamond Layout (GDD exact spec: Top=Skill, Left=Block/Parry, Right=Heavy, Bottom=Light) */}
-        <div className="relative w-40 h-40 sm:w-44 sm:h-44">
-          {/* TOP: Special Skill */}
+        {/* 4-Button Combat Diamond (Top=Skill, Left=Parry, Right=Heavy, Bottom=Light) */}
+        <div
+          aria-label="Combat Action Diamond"
+          className="relative w-40 h-40 sm:w-44 sm:h-44"
+        >
+          {/* TOP: Special Skill with integrated radial cooldown circle */}
           <button
             type="button"
             tabIndex={-1}
@@ -218,12 +291,19 @@ export function TouchControls({
             className={`absolute top-0 left-1/2 -translate-x-1/2 w-14 h-14 sm:w-15 sm:h-15 rounded-full border-2 font-display font-bold text-xs flex flex-col items-center justify-center transition-transform active:scale-90 cursor-pointer ${
               skillReady
                 ? 'bg-cyan-500/90 border-cyan-200 text-slate-950 shadow-lg'
-                : 'bg-[#0f172a]/85 border-slate-600 text-slate-400'
+                : 'bg-[#0f172a]/90 border-slate-600 text-cyan-200'
             }`}
           >
+            {!skillReady && (
+              <RadialProgressIcon
+                progress={skillProgress}
+                strokeHex="#22d3ee"
+                ready={false}
+              />
+            )}
             <span>{skillReady ? 'SKILL' : `${skillCooldown.toFixed(1)}s`}</span>
             <span className="text-[9px] font-mono-num opacity-80">
-              {skillReady ? '[U]' : `${Math.round((1 - skillCooldown / skillMaxCooldown) * 100)}%`}
+              {skillReady ? '[U]' : 'CD'}
             </span>
           </button>
 

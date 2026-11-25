@@ -15,6 +15,7 @@ interface DojoLeaderboardModalProps {
   onSearchChange: (q: string) => void;
   onToggleLike: (entryId: string) => void;
   onVisitDojo: (entry: DojoLeaderboardEntry) => void;
+  onSiegeDojo: (entry: DojoLeaderboardEntry) => void;
   onOpenMyDojo: () => void;
   onPromoteDojo: () => void;
   onRenameMyDojo: (nextName: string) => void;
@@ -37,6 +38,7 @@ export function DojoLeaderboardModal({
   onSearchChange,
   onToggleLike,
   onVisitDojo,
+  onSiegeDojo,
   onOpenMyDojo,
   onPromoteDojo,
   onRenameMyDojo,
@@ -304,6 +306,14 @@ export function DojoLeaderboardModal({
                           </button>
                           <button
                             type="button"
+                            onClick={() => onSiegeDojo(entry)}
+                            aria-label={`Clan Siege in ${entry.dojoName}`}
+                            className="h-9 px-3 bg-rose-500 hover:bg-rose-400 text-white font-display font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            Siege
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => onToggleLike(entry.id)}
                             aria-label={
                               entry.likedByPlayer
@@ -442,6 +452,14 @@ export function DojoLeaderboardModal({
                                 className="px-3 py-1.5 bg-slate-800 hover:bg-sky-500 hover:text-slate-950 text-slate-100 font-display font-bold text-[11px] uppercase tracking-wider cursor-pointer transition-colors"
                               >
                                 Visit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onSiegeDojo(entry)}
+                                aria-label={`Clan Siege in ${entry.dojoName} row`}
+                                className="px-2.5 py-1.5 bg-rose-500 hover:bg-rose-400 text-white font-display font-bold text-[11px] uppercase tracking-wider cursor-pointer transition-colors"
+                              >
+                                Siege
                               </button>
                             </div>
                           )}

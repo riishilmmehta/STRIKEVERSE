@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AURA_HEX, BODY_FRAMES } from './combatRules';
 import type { ComboMoveSpec } from './combatRules';
+import { drawRankEmblemOnCanvas, getRankEmblemSpec } from './rankEmblems';
 import type { EmoteId, HeroCustomization } from './types';
 
 export interface HeroAnimState {
@@ -80,7 +81,14 @@ export class HeroRig {
   private readonly auraRingRight: THREE.Mesh;
   private readonly blockShield: THREE.Mesh;
   private readonly telegraphHalo: THREE.Mesh;
+  public readonly teamRing: THREE.Mesh;
   public readonly contactShadow: THREE.Mesh;
+  private readonly spotlightGroup: THREE.Group;
+  private readonly spotlightConeMat: THREE.MeshBasicMaterial;
+  private readonly spotlightRing: THREE.Mesh;
+  private readonly spotlightRingMat: THREE.MeshBasicMaterial;
+  private rankBadgeSprite: THREE.Sprite | null = null;
+  private rankBadgeTexture: THREE.CanvasTexture | null = null;
 
   private skinMat: THREE.MeshStandardMaterial;
   private hairMat: THREE.MeshStandardMaterial;
@@ -108,6 +116,51 @@ export class HeroRig {
     this.contactShadow = new THREE.Mesh(shadowGeo, shadowMat);
     this.contactShadow.position.y = 0.018;
     this.root.add(this.contactShadow);
+
+    // Subtle ground Team Aura Ring (activated during 2v2 / 4v4 Clan Siege exhibition matches)
+    const teamRingGeo = new THREE.RingGeometry(0.62, 0.78, 24);
+    teamRingGeo.rotateX(-Math.PI / 2);
+    const teamRingMat = new THREE.MeshBasicMaterial({
+      color: 0x10b981,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.teamRing = new THREE.Mesh(teamRingGeo, teamRingMat);
+    this.teamRing.position.y = 0.028;
+    this.teamRing.visible = false;
+    this.root.add(this.teamRing);
+
+    // Volumetric Emote Spotlight beam cone + ground halo (ignites on high-level combos & finishers)
+    this.spotlightGroup = new THREE.Group();
+    this.spotlightGroup.visible = false;
+    const coneGeo = new THREE.CylinderGeometry(0.42, 1.55, 6.2, 24, 1, true);
+    this.spotlightConeMat = new THREE.MeshBasicMaterial({
+      color: 0xfacc15,
+      transparent: true,
+      opacity: 0.24,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const coneMesh = new THREE.Mesh(coneGeo, this.spotlightConeMat);
+    coneMesh.position.y = 3.1;
+
+    const spotRingGeo = new THREE.RingGeometry(0.95, 1.38, 28);
+    spotRingGeo.rotateX(-Math.PI / 2);
+    this.spotlightRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfde047,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.spotlightRing = new THREE.Mesh(spotRingGeo, this.spotlightRingMat);
+    this.spotlightRing.position.y = 0.04;
+    this.spotlightGroup.add(coneMesh, this.spotlightRing);
+    this.root.add(this.spotlightGroup);
 
     // Distinct PBR materials with >= 0.25 roughness spread across skin, cloth, armor, and metal
     this.skinMat = new THREE.MeshStandardMaterial({
@@ -364,7 +417,13 @@ export class HeroRig {
 
     if (enableShadows) {
       this.root.traverse((obj) => {
-        if ((obj as THREE.Mesh).isMesh && obj !== this.contactShadow && obj !== this.blockShield && obj !== this.telegraphHalo) {
+        const isVfxOverlay =
+          obj === this.contactShadow ||
+          obj === this.blockShield ||
+          obj === this.telegraphHalo ||
+          obj === this.teamRing ||
+          obj.parent === this.spotlightGroup;
+        if ((obj as THREE.Mesh).isMesh && !isVfxOverlay) {
           obj.castShadow = true;
           obj.receiveShadow = true;
         }
@@ -751,7 +810,7 @@ export class HeroRig {
       return;
     }
 
-    // Emotes (Victory Flex, Shadowbox, Bow, Hype Dance)
+    // Emotes (Core 4 + 5 Tiered Store Emotes)
     if (state.emote) {
       const et = state.emoteTimer;
       if (state.emote === 'flex') {
@@ -780,6 +839,128 @@ export class HeroRig {
         this.rightArm.rotation.set(-1.6 - d * 0.7, 0, -0.65);
         this.leftLeg.rotation.x = d * 0.4;
         this.rightLeg.rotation.x = -d * 0.4;
+      } else if (state.emote === 'backflip') {
+        const flipP = Math.min(1, (et % 1.15) / 0.85);
+        const arc = Math.sin(flipP * Math.PI);
+        this.hips.position.y = 0.94 + arc * 1.15;
+        this.hips.rotation.x = -flipP * Math.PI * 2;
+        this.leftArm.rotation.set(-1.9, 0, 0.45);
+        this.rightArm.rotation.set(-1.9, 0, -0.45);
+        this.leftLeg.rotation.x = -0.85 * arc;
+        this.leftShin.rotation.x = 1.2 * arc;
+        this.rightLeg.rotation.x = -0.85 * arc;
+        this.rightShin.rotation.x = 1.2 * arc;
+      } else if (state.emote === 'meditate') {
+        this.hips.position.y = 1.38 + Math.sin(et * 3.2) * 0.14;
+        this.hips.rotation.y = Math.sin(et * 1.1) * 0.25;
+        this.leftArm.rotation.set(-0.55, 0.35, 0.75);
+        this.leftForearm.rotation.set(-1.1, 0, 0);
+        this.rightArm.rotation.set(-0.55, -0.35, -0.75);
+        this.rightForearm.rotation.set(-1.1, 0, 0);
+        this.leftLeg.rotation.set(-1.2, 0.5, 0.65);
+        this.leftShin.rotation.x = 1.55;
+        this.rightLeg.rotation.set(-1.2, -0.5, -0.65);
+        this.rightShin.rotation.x = 1.55;
+      } else if (state.emote === 'lightning_pose') {
+        const pulse = Math.sin(et * 18);
+        this.hips.position.y = 0.98 + Math.abs(pulse) * 0.08;
+        this.torso.rotation.x = -0.18;
+        this.leftArm.rotation.set(-2.55, 0, 0.35 + pulse * 0.08);
+        this.rightArm.rotation.set(-2.55, 0, -0.35 - pulse * 0.08);
+        this.leftLeg.rotation.z = 0.24;
+        this.rightLeg.rotation.z = -0.24;
+      } else if (state.emote === 'dragon_roar') {
+        const roar = Math.sin(Math.min(1, et / 0.55) * Math.PI * 0.5);
+        const shake = Math.sin(et * 22) * 0.05;
+        this.hips.position.y = 0.86 + roar * 0.16;
+        this.torso.rotation.x = -0.34 * roar;
+        this.headGroup.rotation.x = -0.38 * roar;
+        this.leftArm.rotation.set(-0.65 + shake, 0, 1.35 * roar);
+        this.leftForearm.rotation.set(-0.9, 0, 0);
+        this.rightArm.rotation.set(-0.65 - shake, 0, -1.35 * roar);
+        this.rightForearm.rotation.set(-0.9, 0, 0);
+        this.leftLeg.rotation.set(-0.22, 0, 0.22);
+        this.rightLeg.rotation.set(0.22, 0, -0.22);
+      } else if (state.emote === 'throne_salute') {
+        const ascend = Math.sin(et * 2.4) * 0.08;
+        this.hips.position.y = 1.24 + ascend;
+        this.torso.rotation.y = Math.sin(et * 1.4) * 0.22;
+        this.rightArm.rotation.set(-2.25, 0, -0.25);
+        this.rightForearm.rotation.set(-0.25, 0, 0);
+        this.leftArm.rotation.set(-0.85, 0.55, 0.35);
+        this.leftForearm.rotation.set(-1.35, 0, 0);
+      } else if (state.emote === 'rank_uncharted_flex') {
+        // Tier 1: The Uncharted — pioneer double-guard power flex & compass torso sway
+        const pump = Math.sin(et * 7.5);
+        this.hips.position.y = 0.94 + Math.abs(pump) * 0.06;
+        this.torso.rotation.x = -0.18;
+        this.torso.rotation.y = Math.sin(et * 2.4) * 0.28;
+        this.headGroup.rotation.x = -0.14;
+        this.leftArm.rotation.set(-0.75 + pump * 0.12, 0.2, 1.45);
+        this.leftForearm.rotation.set(-1.75, 0, 0);
+        this.rightArm.rotation.set(-0.75 - pump * 0.12, -0.2, -1.45);
+        this.rightForearm.rotation.set(-1.75, 0, 0);
+        this.leftLeg.rotation.set(-0.14, 0, 0.22);
+        this.rightLeg.rotation.set(0.14, 0, -0.22);
+      } else if (state.emote === 'rank_wilds_prowl') {
+        // Tier 2: The Wilds — predatory stalker crouch with alternating claw swipes
+        const stalk = Math.sin(et * 5.2);
+        const swipe = Math.sin(et * 10.4);
+        this.hips.position.y = 0.72 + Math.abs(stalk) * 0.08;
+        this.torso.rotation.x = 0.42;
+        this.torso.rotation.y = stalk * 0.45;
+        this.headGroup.rotation.x = -0.32;
+        this.leftArm.rotation.set(-1.25 - Math.max(0, swipe) * 0.55, 0.3, 0.55);
+        this.leftForearm.rotation.set(-0.95, 0, 0);
+        this.rightArm.rotation.set(-1.25 - Math.max(0, -swipe) * 0.55, -0.3, -0.55);
+        this.rightForearm.rotation.set(-0.95, 0, 0);
+        this.leftLeg.rotation.set(-0.62, 0, 0.26);
+        this.leftShin.rotation.x = 0.85;
+        this.rightLeg.rotation.set(-0.38, 0, -0.26);
+        this.rightShin.rotation.x = 0.72;
+      } else if (state.emote === 'rank_frontier_salute') {
+        // Tier 3: The Frontier — vanguard fist-to-chest salute then blazing sky thrust
+        const phase = Math.min(1, et / 0.85);
+        const thrust = et > 0.9 ? Math.min(1, (et - 0.9) / 0.35) : 0;
+        this.hips.position.y = 0.94 + thrust * 0.12;
+        this.torso.rotation.x = -0.12 * thrust;
+        this.torso.rotation.y = -0.25 * phase + 0.38 * thrust;
+        this.rightArm.rotation.set(-1.25 * phase - 1.45 * thrust, -0.55 * (1 - thrust), -0.25);
+        this.rightForearm.rotation.set(-1.45 * (1 - thrust) - 0.15 * thrust, 0, 0);
+        this.leftArm.rotation.set(-0.35, 0.2, 0.38 + thrust * 0.32);
+        this.leftForearm.rotation.set(-0.65, 0, 0);
+        this.leftLeg.rotation.z = 0.2;
+        this.rightLeg.rotation.z = -0.2;
+      } else if (state.emote === 'rank_mythic_ascension') {
+        // Tier 4: The Mythic — weightless sovereign ascension with wide mystic arm spread
+        const hover = Math.sin(et * 3.6) * 0.12;
+        this.hips.position.y = 1.44 + hover;
+        this.hips.rotation.y = Math.sin(et * 1.4) * 0.32;
+        this.torso.rotation.x = -0.2;
+        this.headGroup.rotation.x = -0.22;
+        this.leftArm.rotation.set(-0.35, 0, 1.38 + Math.sin(et * 4.5) * 0.1);
+        this.leftForearm.rotation.set(-0.22, 0, 0);
+        this.rightArm.rotation.set(-0.35, 0, -1.38 - Math.sin(et * 4.5) * 0.1);
+        this.rightForearm.rotation.set(-0.22, 0, 0);
+        this.leftLeg.rotation.set(0.18, 0, 0.12);
+        this.leftShin.rotation.x = 0.38;
+        this.rightLeg.rotation.set(-0.22, 0, -0.12);
+        this.rightShin.rotation.x = 0.55;
+      } else if (state.emote === 'rank_cosmic_meditation') {
+        // Tier 5: The Cosmic — transcendent high-altitude astral lotus meditation with slow celestial orbit
+        const floatY = Math.sin(et * 2.4) * 0.16;
+        this.hips.position.y = 1.62 + floatY;
+        this.hips.rotation.y = et * 0.65;
+        this.torso.rotation.x = -0.06;
+        this.headGroup.rotation.x = -0.08;
+        this.leftArm.rotation.set(-0.48, 0.42, 0.86);
+        this.leftForearm.rotation.set(-1.18, 0, 0);
+        this.rightArm.rotation.set(-0.48, -0.42, -0.86);
+        this.rightForearm.rotation.set(-1.18, 0, 0);
+        this.leftLeg.rotation.set(-1.28, 0.58, 0.72);
+        this.leftShin.rotation.x = 1.68;
+        this.rightLeg.rotation.set(-1.28, -0.58, -0.72);
+        this.rightShin.rotation.x = 1.68;
       }
       return;
     }
@@ -829,11 +1010,129 @@ export class HeroRig {
     }
   }
 
+  public setTeamRing(colorHex: string | null): void {
+    if (!colorHex) {
+      this.teamRing.visible = false;
+      return;
+    }
+    const mat = this.teamRing.material as THREE.MeshBasicMaterial;
+    mat.color.set(colorHex);
+    this.teamRing.visible = true;
+  }
+
+  public setEmoteSpotlight(active: boolean, colorHex = '#facc15', elapsed = 0): void {
+    this.spotlightGroup.visible = active;
+    if (!active) return;
+    this.spotlightConeMat.color.set(colorHex);
+    this.spotlightRingMat.color.set(colorHex);
+    const pulse = 0.85 + Math.sin(elapsed * 9) * 0.15;
+    this.spotlightConeMat.opacity = 0.24 * pulse;
+    this.spotlightRingMat.opacity = 0.78 * pulse;
+    this.spotlightRing.rotation.z = elapsed * 2.6;
+    this.spotlightRing.scale.setScalar(0.96 + Math.sin(elapsed * 6) * 0.08);
+  }
+
+  public setOverheadRankBadge(
+    info: { name: string; rank: number; isPlayer?: boolean } | null
+  ): void {
+    if (!info) {
+      if (this.rankBadgeSprite) {
+        this.root.remove(this.rankBadgeSprite);
+        (this.rankBadgeSprite.material as THREE.SpriteMaterial).dispose();
+        this.rankBadgeSprite = null;
+      }
+      if (this.rankBadgeTexture) {
+        this.rankBadgeTexture.dispose();
+        this.rankBadgeTexture = null;
+      }
+      return;
+    }
+
+    const emblem = getRankEmblemSpec(info.rank);
+    const canvas = document.createElement('canvas');
+    canvas.width = 440;
+    canvas.height = 120;
+    const ctx = canvas.getContext('2d')!;
+
+    // Clipped athletic background plate
+    ctx.clearRect(0, 0, 440, 120);
+    ctx.beginPath();
+    ctx.moveTo(14, 6);
+    ctx.lineTo(434, 6);
+    ctx.lineTo(426, 114);
+    ctx.lineTo(6, 114);
+    ctx.closePath();
+    ctx.fillStyle = info.isPlayer ? 'rgba(15, 23, 42, 0.94)' : 'rgba(9, 14, 26, 0.9)';
+    ctx.fill();
+
+    // Glowing Tier or Player Gold border
+    ctx.lineWidth = info.isPlayer ? 4 : 3;
+    ctx.strokeStyle = info.isPlayer ? '#facc15' : emblem.primaryHex;
+    ctx.stroke();
+
+    // Top accent bar
+    ctx.fillStyle = emblem.primaryHex;
+    ctx.fillRect(14, 6, 420, 5);
+
+    // Draw bespoke Tier / Apex / Omni Emblem on left
+    drawRankEmblemOnCanvas(ctx, 62, 62, 36, emblem);
+
+    // Fighter Name + (YOU) badge
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 30px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    const displayName = info.isPlayer
+      ? `${info.name.toUpperCase()} (YOU)`
+      : info.name.toUpperCase();
+    ctx.fillText(displayName.slice(0, 18), 114, 38);
+
+    // Rank #N · RankName
+    ctx.font = '800 24px monospace';
+    ctx.fillStyle = emblem.primaryHex;
+    ctx.fillText(`#${emblem.rank} ${emblem.rankName.toUpperCase()}`, 114, 70);
+
+    // Tier Label
+    ctx.font = '700 16px sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(`TIER ${emblem.tier} · ${emblem.tierName.toUpperCase()}`, 114, 96);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+
+    if (this.rankBadgeTexture) {
+      this.rankBadgeTexture.dispose();
+    }
+    this.rankBadgeTexture = tex;
+
+    if (!this.rankBadgeSprite) {
+      const mat = new THREE.SpriteMaterial({
+        map: tex,
+        transparent: true,
+        depthWrite: false,
+      });
+      this.rankBadgeSprite = new THREE.Sprite(mat);
+      this.rankBadgeSprite.position.set(0, 2.55, 0);
+      this.rankBadgeSprite.scale.set(2.35, 0.64, 1);
+      this.rankBadgeSprite.renderOrder = 12;
+      this.root.add(this.rankBadgeSprite);
+    } else {
+      const mat = this.rankBadgeSprite.material as THREE.SpriteMaterial;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    }
+  }
+
   public dispose(): void {
+    this.setOverheadRankBadge(null);
     this.root.traverse((obj) => {
       const m = obj as THREE.Mesh;
       if (m.geometry) m.geometry.dispose();
     });
+    (this.teamRing.material as THREE.Material).dispose();
+    this.spotlightConeMat.dispose();
+    this.spotlightRingMat.dispose();
     this.skinMat.dispose();
     this.hairMat.dispose();
     this.topMat.dispose();

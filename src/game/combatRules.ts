@@ -36,7 +36,7 @@ export const HERO_CLASSES: Record<HeroClassId, ClassSpec> = {
     name: 'Striker',
     role: 'Balanced · Fast Combo Chains',
     description: 'Fluid martial artist built for rapid Light/Heavy sequences and rising launchers.',
-    maxHp: 120,
+    maxHp: 240,
     moveSpeed: 7.4,
     attackPower: 1.0,
     attackSpeed: 1.08,
@@ -57,7 +57,7 @@ export const HERO_CLASSES: Record<HeroClassId, ClassSpec> = {
     name: 'Juggernaut',
     role: 'Heavy · High Impact Armor',
     description: 'Armored powerhouse whose strikes shrug off flinch and send foes into walls.',
-    maxHp: 145,
+    maxHp: 290,
     moveSpeed: 6.4,
     attackPower: 1.18,
     attackSpeed: 0.92,
@@ -78,7 +78,7 @@ export const HERO_CLASSES: Record<HeroClassId, ClassSpec> = {
     name: 'Phantom',
     role: 'Agile · Teleport Flanker',
     description: 'Lightning-quick assassin with blink strikes and devastating air juggles.',
-    maxHp: 105,
+    maxHp: 215,
     moveSpeed: 8.3,
     attackPower: 1.06,
     attackSpeed: 1.18,
@@ -99,7 +99,7 @@ export const HERO_CLASSES: Record<HeroClassId, ClassSpec> = {
     name: 'Ranger',
     role: 'Mid-Range · Energy Arcs',
     description: 'Kinetic marksman combining staff sweeps with crackling plasma volleys.',
-    maxHp: 112,
+    maxHp: 225,
     moveSpeed: 7.5,
     attackPower: 0.98,
     attackSpeed: 1.05,
@@ -120,7 +120,7 @@ export const HERO_CLASSES: Record<HeroClassId, ClassSpec> = {
     name: 'Support / Tech',
     role: 'Gadgets · Shield & Pulse',
     description: 'Tactical specialist deploying an energy Aegis dome and pulse shockwaves.',
-    maxHp: 125,
+    maxHp: 250,
     moveSpeed: 7.1,
     attackPower: 0.96,
     attackSpeed: 1.02,
@@ -277,18 +277,18 @@ export const PET_ABILITIES: Record<PetTypeId, PetAbilitySpec> = {
     id: 'orb',
     petName: 'Aether Orb',
     abilityName: 'Aegis Nova',
-    description: 'Restores 22 HP & 35 Stamina while blasting nearby enemies back.',
-    passiveLabel: '+10 Max HP',
+    description: 'Restores 36 HP & 35 Stamina while blasting nearby enemies back.',
+    passiveLabel: '+20 Max HP',
     cooldown: 8.0,
-    damage: 18,
-    healHp: 22,
+    damage: 20,
+    healHp: 36,
     restoreStamina: 35,
     stunDuration: 0.55,
     range: 5.4,
     kind: 'aegis_nova',
     colorHex: '#34d399',
     speedBonusMult: 1.0,
-    maxHpBonus: 10,
+    maxHpBonus: 20,
     ultGainMult: 1.0,
   },
 };
@@ -577,13 +577,15 @@ export interface DefenseResult {
   outcome: 'parry' | 'block' | 'hit';
   finalDamage: number;
   staminaCost: number;
+  staminaRefund: number;
   attackerStunDuration: number;
   defenderUltGain: number;
   knockbackMult: number;
 }
 
 /**
- * Evaluates Block (70% reduction) vs Perfect Parry (220ms / 280ms with auto-assist -> 0 damage + attacker stun).
+ * Evaluates Block (70% reduction) vs Perfect Parry (220ms / 280ms with auto-assist -> 0 damage,
+ * long 1.65s stun, stamina refund, and massive Ult swing so defense truly turns fights around).
  */
 export function resolveIncomingHit(params: {
   rawDamage: number;
@@ -604,8 +606,9 @@ export function resolveIncomingHit(params: {
       outcome: 'parry',
       finalDamage: 0,
       staminaCost: 0,
-      attackerStunDuration: 1.35,
-      defenderUltGain: 22,
+      staminaRefund: 25,
+      attackerStunDuration: 1.65,
+      defenderUltGain: 28,
       knockbackMult: 0,
     };
   }
@@ -614,9 +617,10 @@ export function resolveIncomingHit(params: {
     return {
       outcome: 'block',
       finalDamage: Math.max(1, Math.round(params.rawDamage * 0.3)),
-      staminaCost: 16,
+      staminaCost: 14,
+      staminaRefund: 0,
       attackerStunDuration: 0,
-      defenderUltGain: 7,
+      defenderUltGain: 9,
       knockbackMult: 0.35,
     };
   }
@@ -625,10 +629,25 @@ export function resolveIncomingHit(params: {
     outcome: 'hit',
     finalDamage: Math.max(1, Math.round(params.rawDamage)),
     staminaCost: 0,
+    staminaRefund: 0,
     attackerStunDuration: 0,
     defenderUltGain: 10,
     knockbackMult: 1.0,
   };
+}
+
+/**
+ * Diminishing combo damage scaling (proration):
+ * Hits 1–3 deal full damage; starting at the 4th+ hit in an unbroken combo,
+ * damage tapers downward so matches require varied neutral exchanges instead of infinite stunlocks.
+ */
+export function computeComboProration(comboCount: number): number {
+  const hitIndex = Math.max(0, Math.floor(comboCount));
+  if (hitIndex < 3) return 1.0; // Hits 1, 2, 3 (0-indexed: 0, 1, 2)
+  if (hitIndex === 3) return 0.78; // 4th hit
+  if (hitIndex === 4) return 0.62; // 5th hit
+  if (hitIndex === 5) return 0.50; // 6th hit
+  return Math.max(0.40, 0.50 - (hitIndex - 5) * 0.04);
 }
 
 export function computeScaledDamage(
@@ -640,10 +659,10 @@ export function computeScaledDamage(
 ): number {
   const cls = HERO_CLASSES[classId];
   const frm = BODY_FRAMES[frame];
-  // Mild combo scaling rewards chaining without one-shotting
-  const comboBonus = 1 + Math.min(comboCount, 6) * 0.05;
-  const counterMult = isCounterOrStunned ? 1.25 : 1.0;
-  return Math.round(baseDamage * cls.attackPower * frm.powerMult * comboBonus * counterMult);
+  const proration = computeComboProration(comboCount);
+  // Counter / Parry punish deals a decisive 1.45x comeback multiplier!
+  const counterMult = isCounterOrStunned ? 1.45 : 1.0;
+  return Math.max(1, Math.round(baseDamage * cls.attackPower * frm.powerMult * proration * counterMult));
 }
 
 export type ComboRank = 'C' | 'B' | 'A' | 'S' | 'S+';
@@ -756,7 +775,7 @@ export const CAMPAIGN_BOSSES: CampaignBossSpec[] = [
     title: 'Blade of the Azure Gate',
     classId: 'striker',
     aiPolicy: 'duelist',
-    maxHp: 165,
+    maxHp: 310,
     damageScale: 0.9,
     lessonTitle: 'Trial 1 · Parry Timing',
     lessonHint: 'Tap Block [L / Q] when Kaito flashes gold to trigger a Perfect Parry & stun!',
@@ -779,7 +798,7 @@ export const CAMPAIGN_BOSSES: CampaignBossSpec[] = [
     title: 'Colosseum Breaker',
     classId: 'juggernaut',
     aiPolicy: 'charger',
-    maxHp: 220,
+    maxHp: 390,
     damageScale: 1.05,
     lessonTitle: 'Trial 2 · Arena Knockback',
     lessonHint: 'Finish combos with Heavy [K] to smash Iron Bull into crates & pillars for bonus damage!',
@@ -803,7 +822,7 @@ export const CAMPAIGN_BOSSES: CampaignBossSpec[] = [
     title: 'Sovereign of the Spire',
     classId: 'phantom',
     aiPolicy: 'flanker',
-    maxHp: 255,
+    maxHp: 450,
     damageScale: 1.15,
     lessonTitle: 'Trial 3 · Skill-Cancel Mastery',
     lessonHint: 'Chain Light-Light-Heavy [J-J-K] into Skill [U / E] and unleash your Ultimate [I / R]!',

@@ -7,6 +7,7 @@ import {
   HERO_CLASSES,
   PET_ABILITIES,
   computeComboMeterState,
+  computeComboProration,
   computeFinisherMoveDamage,
   computeHeroMaxHp,
   computeScaledDamage,
@@ -192,5 +193,42 @@ test('Companion Pets define distinct active abilities and passive perks', () => 
   assert.ok(PET_ABILITIES.fox.stunDuration >= 1.0);
   assert.ok(PET_ABILITIES.orb.healHp >= 20 && PET_ABILITIES.orb.restoreStamina >= 30);
 });
+
+test('Doubled HP pools, diminishing 4th+ hit combo proration, and parry comeback swing', () => {
+  for (const classId of Object.keys(HERO_CLASSES) as Array<keyof typeof HERO_CLASSES>) {
+    assert.ok(
+      HERO_CLASSES[classId].maxHp >= 210,
+      `Expected doubled HP pool for ${classId}, got ${HERO_CLASSES[classId].maxHp}`
+    );
+  }
+
+  // Diminishing combo damage kicks in on 4th+ hit (0-indexed prior hits: 0,1,2 -> 1.0x; 3 -> 0.78x) and floors at 0.40x
+  assert.equal(computeComboProration(0), 1.0);
+  assert.equal(computeComboProration(2), 1.0);
+  assert.ok(computeComboProration(3) < 1.0 && computeComboProration(3) > 0.7);
+  assert.ok(computeComboProration(4) < computeComboProration(3));
+  assert.equal(computeComboProration(9), 0.4);
+
+  const hit1Dmg = computeScaledDamage(20, 'striker', 'balanced', 1, false);
+  const hit6Dmg = computeScaledDamage(20, 'striker', 'balanced', 6, false);
+  assert.ok(hit6Dmg < hit1Dmg, `Expected 6th combo hit (${hit6Dmg}) < 1st hit (${hit1Dmg})`);
+
+  // Perfect parry refunds stamina, grants substantial ult, and boosts counter punish by ~1.45x
+  const parry = resolveIncomingHit({
+    rawDamage: 24,
+    isBlocking: true,
+    timeSinceBlockPress: 0.1,
+    defenderStamina: 35,
+    autoAssist: false,
+  });
+  assert.equal(parry.outcome, 'parry');
+  assert.ok(parry.staminaRefund >= 20);
+  assert.ok(parry.defenderUltGain >= 25);
+  assert.ok(parry.attackerStunDuration >= 1.5);
+
+  const counterDmg = computeScaledDamage(20, 'striker', 'balanced', 1, true);
+  assert.ok(counterDmg >= Math.round(hit1Dmg * 1.4));
+});
+
 
 

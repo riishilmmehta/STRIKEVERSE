@@ -1,4 +1,5 @@
-import type { DojoBlock, DojoBlockType } from './types';
+import { resolveDummyVariant } from './trainingDummy';
+import type { DojoBlock, DojoBlockType, DummyVariantId } from './types';
 
 export interface DojoBlockCatalogItem {
   type: DojoBlockType;
@@ -13,7 +14,7 @@ export const DOJO_CATALOG: Record<DojoBlockType, DojoBlockCatalogItem> = {
   dummy: {
     type: 'dummy',
     label: 'Training Dummy',
-    role: 'Combo & parry target',
+    role: 'Combo & Campaign AI parry target',
     cost: 0,
     radius: 0.7,
     color: '#d97706',
@@ -65,8 +66,8 @@ export const DOJO_GRID_STEP = 2;
 export const MAX_DOJO_BLOCKS = 32;
 
 export const DEFAULT_DOJO_BLOCKS: DojoBlock[] = [
-  { id: 'starter-dummy-1', type: 'dummy', x: 0, z: -6, rotation: 0 },
-  { id: 'starter-dummy-2', type: 'dummy', x: 4, z: -6, rotation: -0.3 },
+  { id: 'starter-dummy-1', type: 'dummy', dummyVariant: 'static', x: 0, z: -6, rotation: 0 },
+  { id: 'starter-dummy-2', type: 'dummy', dummyVariant: 'kaito_duelist', x: 4, z: -6, rotation: -0.3 },
   { id: 'starter-tramp-1', type: 'trampoline', x: -6, z: -2, rotation: 0 },
   { id: 'starter-dash-1', type: 'dashpad', x: -6, z: 4, rotation: 0 },
   { id: 'starter-crate-1', type: 'crate', x: 6, z: -2, rotation: 0 },
@@ -109,7 +110,8 @@ export function placeDojoBlock(
   type: DojoBlockType,
   x: number,
   z: number,
-  rotation = 0
+  rotation = 0,
+  dummyVariant?: DummyVariantId
 ): { blocks: DojoBlock[]; placed: DojoBlock | null; reason?: string } {
   const check = canPlaceDojoBlock(existing, x, z);
   if (!check.ok) {
@@ -121,6 +123,7 @@ export function placeDojoBlock(
     x: snapToDojoGrid(x),
     z: snapToDojoGrid(z),
     rotation,
+    ...(type === 'dummy' ? { dummyVariant: resolveDummyVariant(dummyVariant) } : {}),
   };
   return { blocks: [...existing, placed], placed };
 }

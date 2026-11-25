@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="55%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#070a12" />
+    </radialGradient>
+    <linearGradient id="flameMain" x1="25%" y1="95%" x2="70%" y2="8%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="52%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#fde047" />
+    </linearGradient>
+    <linearGradient id="boltCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed dark obsidian backdrop -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)" />
+
+  <!-- Subtle tactical corner bevel frame -->
+  <polygon
+    points="58,34 454,34 478,58 478,454 454,478 58,478 34,454 34,58"
+    fill="none"
+    stroke="url(#rim)"
+    stroke-opacity="0.45"
+    stroke-width="6"
+  />
+
+  <!-- Warm ambient ember glow behind emblem -->
+  <circle cx="256" cy="248" r="150" fill="#f97316" fill-opacity="0.16" />
+
+  <!-- Stylized Martial Flame-Lightning Crest -->
+  <g transform="translate(0, 6)">
+    <!-- Outer flame blade -->
+    <path
+      d="M242 74 C272 132 288 176 266 226 C244 276 206 306 234 374 C172 344 134 282 146 218 C156 164 214 134 242 74 Z"
+      fill="url(#flameMain)"
+      stroke="#070a12"
+      stroke-width="10"
+      stroke-linejoin="round"
+    />
+    <!-- Inner kinetic flame streak -->
+    <path
+      d="M312 146 C332 192 328 242 296 286 C272 318 262 346 276 382 C236 356 234 304 260 258 C286 212 308 186 312 146 Z"
+      fill="url(#flameMain)"
+      stroke="#070a12"
+      stroke-width="9"
+      stroke-linejoin="round"
+    />
+    <!-- Cyan martial lightning slash accent -->
+    <polygon
+      points="336,192 374,192 324,302 356,302 276,418 298,324 272,324"
+      fill="url(#boltCyan)"
+      stroke="#070a12"
+      stroke-width="9"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <!-- Bottom kinetic accent bar -->
+  <rect x="136" y="428" width="168" height="10" fill="#f59e0b" />
+  <rect x="314" y="428" width="62" height="10" fill="#38bdf8" />
+</svg>

@@ -1,20 +1,28 @@
+import type { DailyStreakSummary } from '../game/dailyStreak';
 import type { HeroCustomization, WorldZone } from '../game/types';
 import { HERO_CLASSES } from '../game/combatRules';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface TitleScreenProps {
   hero: HeroCustomization;
   wins: number;
   level: number;
+  coins: number;
+  dailyStreak: DailyStreakSummary;
   onStart: (zone: WorldZone) => void;
   onOpenCustomize: () => void;
+  onOpenDailyReward: () => void;
 }
 
 export function TitleScreen({
   hero,
   wins,
   level,
+  coins,
+  dailyStreak,
   onStart,
   onOpenCustomize,
+  onOpenDailyReward,
 }: TitleScreenProps) {
   const cls = HERO_CLASSES[hero.classId];
 
@@ -29,20 +37,81 @@ export function TitleScreen({
         }}
       />
 
-      {/* Top minimal hero identity line */}
-      <div className="relative z-10 flex items-center justify-between">
-        <div className="text-xs font-medium tracking-wider text-slate-300 hud-text-shadow">
+      {/* Top row: minimal hero identity line on left + Daily Reward Streak Badge on right */}
+      <div className="relative z-10 flex items-start justify-between gap-4">
+        <div className="text-xs font-medium tracking-wider text-slate-300 hud-text-shadow pt-1">
           <span>{hero.name}</span>
           <span className="mx-2 text-slate-500">·</span>
           <span className="text-amber-400">{cls.name}</span>
           <span className="mx-2 text-slate-500">·</span>
           <span className="font-mono-num">LVL {level}</span>
+          <span className="mx-2 text-slate-500">·</span>
+          <span className="font-mono-num text-emerald-300">{coins.toLocaleString()} COINS</span>
           {wins > 0 && (
             <>
               <span className="mx-2 text-slate-500">·</span>
               <span className="font-mono-num">{wins} WINS</span>
             </>
           )}
+        </div>
+
+        {/* Top-Right Utility Cluster: In-App PWA Install + Daily Reward Retention Badge */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <PWAInstallButton variant="title" />
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onOpenDailyReward();
+            }}
+            aria-label="Daily Reward"
+            className={`pointer-events-auto clip-bevel px-4 py-2.5 border text-left transition-colors cursor-pointer shadow-xl flex items-center gap-3 shrink-0 ${
+              dailyStreak.canClaim
+                ? 'bg-[#0b101b]/94 hover:bg-[#131d33] border-amber-400 text-white'
+                : 'bg-[#0b101b]/88 hover:bg-[#131d33] border-emerald-400/55 text-slate-200'
+            }`}
+          >
+            <div
+              className={`w-9 h-9 clip-angled-sm flex items-center justify-center shrink-0 ${
+                dailyStreak.canClaim
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-emerald-500/20 border border-emerald-400/50 text-emerald-300'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-none stroke-current" strokeWidth="2.2">
+                <path d="M12 2v4" />
+                <path d="M5 10h14v10H5z" />
+                <path d="M3 6h18v4H3z" />
+                <path d="M12 6v14" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`font-display font-bold text-xs tracking-wider uppercase ${
+                    dailyStreak.canClaim ? 'text-amber-300' : 'text-emerald-300'
+                  }`}
+                >
+                  Daily Reward
+                </span>
+                <span className="text-[11px] font-mono-num text-slate-400">
+                  {dailyStreak.canClaim
+                    ? `Day ${dailyStreak.nextClaimDay}`
+                    : `Day ${dailyStreak.effectiveStreak} Streak`}
+                </span>
+              </div>
+              <div className="font-display font-bold text-sm font-mono-num leading-tight mt-0.5">
+                {dailyStreak.canClaim ? (
+                  <span className="text-white">+{dailyStreak.todayRewardCoins} Coins Ready</span>
+                ) : (
+                  <span className="text-slate-300">
+                    Claimed · Next +{dailyStreak.nextRewardCoins}
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -155,7 +224,7 @@ export function TitleScreen({
 
       {/* Single flat, borderless control hint line in bottom safe margin */}
       <div className="relative z-10 text-xs text-slate-100 font-mono-num tracking-wide hud-text-shadow">
-        WASD Move · J Light · K Heavy · L Block / Parry · U Skill · Shift Dash · Space Jump · Enter Start
+        WASD Move · Drag Look · J Light · K Heavy · L Block / Parry · U Skill · Shift Dash · Space Jump · Enter Start
       </div>
     </div>
   );
